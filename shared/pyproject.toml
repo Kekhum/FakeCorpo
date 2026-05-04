@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fakecorpo-shared"
+version = "0.1.0"
+description = "Shared schemas and helpers for the FakeCorpo simulator family"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["fakecorpo_shared"]
