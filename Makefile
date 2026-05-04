@@ -1,6 +1,7 @@
 .PHONY: help up down logs ps restart rebuild reset \
-        venv install install-shared install-clock install-cli \
+        venv install install-shared install-clock install-procurement install-cli \
         clock-run clock-logs clock-reset \
+        procurement-logs procurement-psql \
         cli-status cli-pause cli-resume \
         test clean
 
@@ -31,12 +32,16 @@ help:
 	@echo "  make reset        - DROP all sim state (volumes + containers) and restart fresh"
 	@echo ""
 	@echo "Hot-reload dev for the clock (instead of running it in compose):"
-	@echo "  make install      - install shared + clock + cli into local .venv"
+	@echo "  make install      - install shared + clock + procurement + cli into local .venv"
 	@echo "  make clock-run    - run orchestrator-clock locally with --reload on :8000"
 	@echo "                      (stop the compose 'orchestrator-clock' service first)"
 	@echo "  make clock-logs   - tail logs of the compose orchestrator-clock service"
 	@echo "  make clock-reset  - clear ONLY the clock state in Redis (sim restarts from"
 	@echo "                      INITIAL_SIM_TIME on next tick), without touching other data"
+	@echo ""
+	@echo "Procurement domain:"
+	@echo "  make procurement-logs   - tail logs of sim-procurement"
+	@echo "  make procurement-psql   - psql shell into db_procurement (suppliers, POs, ...)"
 	@echo ""
 	@echo "CLI (talks to whichever clock is on :8000):"
 	@echo "  make cli-status   - show current sim clock state"
@@ -81,13 +86,16 @@ venv: $(VENV_PY)
 
 # ---------- Python install ----------
 
-install: install-shared install-clock install-cli
+install: install-shared install-clock install-procurement install-cli
 
 install-shared: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./shared
 
 install-clock: $(VENV_PY)
 	$(VENV_PY) -m pip install -e "./simulators/orchestrator-clock[test]"
+
+install-procurement: $(VENV_PY)
+	$(VENV_PY) -m pip install -e "./simulators/sim-procurement[test]"
 
 install-cli: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./tools/fakecorpo-cli
@@ -106,6 +114,12 @@ clock-reset:
 	@echo "Clock state cleared. Restart the orchestrator-clock to seed from INITIAL_SIM_TIME:"
 	@echo "  docker compose restart orchestrator-clock"
 
+procurement-logs:
+	docker compose logs -f --tail=100 sim-procurement
+
+procurement-psql:
+	docker compose exec postgres psql -U fakecorpo -d db_procurement
+
 cli-status:
 	$(VENV_BIN)/fakecorpo clock status
 
@@ -118,7 +132,9 @@ cli-resume:
 # ---------- Test / clean ----------
 
 test: $(VENV_PY)
-	$(VENV_PY) -m pytest -q simulators/orchestrator-clock/tests
+	$(VENV_PY) -m pytest -q \
+	    simulators/orchestrator-clock/tests \
+	    simulators/sim-procurement/tests
 
 clean:
 	@echo "Removing build artifacts (keeping $(VENV) and docker volumes)"

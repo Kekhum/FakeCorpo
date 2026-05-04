@@ -26,14 +26,16 @@ A globally-shared **orchestrator-clock** publishes simulated time to a Kafka top
 
 ## Status
 
-This is **iteration 1** — a 100% local Docker learning environment. Implemented:
+This is **iteration 2** — a 100% local Docker learning environment. Implemented:
 
-- Local infrastructure (Redis, Redpanda + console, MinIO, Postgres) via `docker compose`
-- `orchestrator-clock` service — FastAPI app with HTTP control plane and a background ticker that advances simulated time and publishes `clock.tick` events to Redpanda. Runs as a compose service (default) or locally with hot reload (dev).
-- `fakecorpo-cli` admin tool — `fakecorpo clock {status,pause,resume,speed,seek}`
-- Shared schemas (`fakecorpo_shared.schemas.clock`) — `ClockState`, `ClockTick`
+- Local infrastructure (Redis, Redpanda + console, MinIO, Postgres) via `docker compose`.
+- `orchestrator-clock` — global simulation clock; FastAPI control plane, ticker publishing `clock.tick` to Redpanda.
+- `sim-procurement` — first business-domain actor. Subscribes to `clock.tick`. Every simulated week the NL hub picks 1-3 suppliers and places purchase orders for green coffee; every simulated day the arrivals scanner settles in-transit POs (on-time / delayed / very-delayed / lost), runs QC (accepted / partial / rejected), and publishes `procurement.po_created` and `procurement.po_arrived` events. State persists in its own Postgres database `db_procurement`. Master data (10 international suppliers + 12 coffee varieties) seeded on first start.
+- **Dirty-data layer** (the meat of the DE/DS exercise): supplier names on invoices that drift from canonical master data (different casing, abbreviations, legal forms — the MDM problem); a chunk of invoices billed in EUR even though contracts are USD, with FX rates that jitter and occasionally go missing; arrivals that come late, very late, or never; QC rejections with realistic reasons. All probabilities are env-tunable (`PROC_P_*`).
+- `fakecorpo-cli` admin tool — `fakecorpo clock {status,pause,resume,speed,seek}`.
+- Shared schemas (`fakecorpo_shared.schemas`) — `clock.ClockState`, `clock.ClockTick`, `procurement.PurchaseOrderCreated`.
 
-Not yet here: any business-domain simulator (procurement, production, sales-pos, ...), seeders, per-brand CRM databases.
+Not yet here: production (palarnia), sales-pos, e-commerce, B2B, finance, HR, support, per-brand CRMs, PDF invoices to MinIO, dirty-data injectors.
 
 ## Local quickstart — "the company is alive on my laptop"
 
@@ -66,6 +68,18 @@ docker compose restart orchestrator-clock
 make reset
 ```
 
+### Watch the procurement domain
+
+After `make up`, `sim-procurement` boots, creates `db_procurement`, seeds 10 suppliers and 12 coffee varieties, then waits for ticks. With the default speed (288), the first PO comes ~35 real minutes after start; bump it for impatient inspection:
+
+```bash
+fakecorpo clock speed 86400         # 1 sim-day per real second -> 1 sim-week per 7 sec
+make procurement-logs               # watch POs being placed
+make procurement-psql               # poke at suppliers / purchase_orders / po_lines
+```
+
+In Redpanda Console (<http://localhost:8080>), the topic `procurement.po_created` carries one event per PO.
+
 ### Hot-reload dev mode for the clock
 
 When you're editing `simulators/orchestrator-clock/` and want instant feedback:
@@ -89,9 +103,9 @@ All env vars are documented in [.env.example](./.env.example). The `CLOCK_*` var
 
 ## Next iterations (planned)
 
-1. `sim-procurement` (NL hub buys green coffee from suppliers, generates POs, contracts, FX, intentional dirty data)
-2. `sim-production` (palarnia in Rotterdam roasts batches according to demand, IoT events to Kafka, batch reports to MinIO)
-3. `sim-pos-cafes` (3 marki, kawiarnie sprzedają wg sezonowości + pogody, POS events + nightly CSV)
-4. `sim-ecommerce`, `sim-b2b`, `sim-marketing`, `sim-finance`, `sim-hr`, `sim-support`
-5. Per-brand CRM databases with cross-brand duplicate-customer scenarios
-6. A "starter" notebook for DE/DS pointing at the source systems
+1. `sim-procurement` extensions: PDF invoices to MinIO, FX volatility, supplier name typos & duplicates, late deliveries, quality rejections (the dirty-data layer).
+2. `sim-production` (palarnia in Rotterdam roasts batches according to procurement supply, IoT events to Kafka, batch reports to MinIO).
+3. `sim-pos-cafes` (3 marki, kawiarnie sprzedają wg sezonowości + pogody, POS events + nightly CSV).
+4. `sim-ecommerce`, `sim-b2b`, `sim-marketing`, `sim-finance`, `sim-hr`, `sim-support`.
+5. Per-brand CRM databases with cross-brand duplicate-customer scenarios.
+6. A "starter" notebook for DE/DS pointing at the source systems.
