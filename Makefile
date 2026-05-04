@@ -1,5 +1,6 @@
 .PHONY: help up down logs ps restart rebuild reset \
         venv install install-shared install-clock install-procurement install-production install-pos install-cli \
+        install-notebooks notebook \
         clock-run clock-logs clock-reset \
         procurement-logs procurement-psql \
         production-logs production-psql \
@@ -52,6 +53,10 @@ help:
 	@echo "POS domain (15 cafés across 3 brands):"
 	@echo "  make pos-logs           - tail logs of sim-pos-cafes"
 	@echo "  make pos-psql           - psql shell into db_pos (cafes, transactions, weather, ...)"
+	@echo ""
+	@echo "DE/DS notebooks:"
+	@echo "  make install-notebooks  - add pandas + jupyter + kafka-python to .venv"
+	@echo "  make notebook           - open Jupyter Lab on ./notebooks"
 	@echo ""
 	@echo "CLI (talks to whichever clock is on :8000):"
 	@echo "  make cli-status   - show current sim clock state"
@@ -112,6 +117,14 @@ install-production: $(VENV_PY)
 
 install-pos: $(VENV_PY)
 	$(VENV_PY) -m pip install -e "./simulators/sim-pos-cafes[test]"
+
+# Notebook deps (pandas / jupyter / kafka-python) installed into the same .venv
+install-notebooks: $(VENV_PY)
+	$(VENV_PY) -m pip install -r notebooks/requirements.txt
+
+notebook: $(VENV_PY)
+	@echo "Opening Jupyter Lab on ./notebooks. Click any .py file - jupytext renders it as a notebook."
+	$(VENV_BIN)/jupyter lab --notebook-dir=notebooks/
 
 install-cli: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./tools/fakecorpo-cli

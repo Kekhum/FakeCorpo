@@ -85,6 +85,17 @@ make production-psql                 # poke at green_inventory / roasting_batche
 In Redpanda Console (<http://localhost:8080>) you'll see seven topics in flight:
 `clock.tick` · `procurement.po_created` · `procurement.po_arrived` · `production.batch_started` · `production.batch_completed` · `production.roaster_telemetry` · `pos.transaction_completed` (the last two are high-frequency time-series streams).
 
+### Get to the data faster — DE/DS starter notebooks
+
+Three short tours of the running platform live in [notebooks/](./notebooks/). They show how to connect to all three Postgres databases, do a cross-domain join from supplier to café revenue, and consume events from Redpanda. They're written in jupytext "percent" format (`# %%`-separated cells) so they open as notebooks in Jupyter Lab / VS Code / PyCharm and also run as plain scripts.
+
+```bash
+make install-notebooks    # pandas + jupyter + kafka-python into ./.venv
+make notebook             # opens Jupyter Lab on ./notebooks
+```
+
+See [notebooks/README.md](./notebooks/README.md) for what each notebook covers and ideas for what to do next.
+
 ### Hot-reload dev mode for the clock
 
 When you're editing `simulators/orchestrator-clock/` and want instant feedback:

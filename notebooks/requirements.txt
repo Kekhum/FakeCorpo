@@ -1,0 +1,12 @@
+# Notebook dependencies — installed into the project's .venv via `make install-notebooks`.
+# Sync drivers on purpose: notebooks are interactive, async is friction here.
+
+pandas>=2.2
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+kafka-python>=2.0
+matplotlib>=3.8
+
+# Notebook UX
+jupyterlab>=4.0
+jupytext>=1.16
