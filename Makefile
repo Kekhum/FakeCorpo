@@ -1,7 +1,8 @@
 .PHONY: help up down logs ps restart rebuild reset \
-        venv install install-shared install-clock install-procurement install-cli \
+        venv install install-shared install-clock install-procurement install-production install-cli \
         clock-run clock-logs clock-reset \
         procurement-logs procurement-psql \
+        production-logs production-psql \
         cli-status cli-pause cli-resume \
         test clean
 
@@ -42,6 +43,10 @@ help:
 	@echo "Procurement domain:"
 	@echo "  make procurement-logs   - tail logs of sim-procurement"
 	@echo "  make procurement-psql   - psql shell into db_procurement (suppliers, POs, ...)"
+	@echo ""
+	@echo "Production domain (Rotterdam roastery):"
+	@echo "  make production-logs    - tail logs of sim-production"
+	@echo "  make production-psql    - psql shell into db_production (recipes, batches, ...)"
 	@echo ""
 	@echo "CLI (talks to whichever clock is on :8000):"
 	@echo "  make cli-status   - show current sim clock state"
@@ -86,7 +91,7 @@ venv: $(VENV_PY)
 
 # ---------- Python install ----------
 
-install: install-shared install-clock install-procurement install-cli
+install: install-shared install-clock install-procurement install-production install-cli
 
 install-shared: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./shared
@@ -96,6 +101,9 @@ install-clock: $(VENV_PY)
 
 install-procurement: $(VENV_PY)
 	$(VENV_PY) -m pip install -e "./simulators/sim-procurement[test]"
+
+install-production: $(VENV_PY)
+	$(VENV_PY) -m pip install -e "./simulators/sim-production[test]"
 
 install-cli: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./tools/fakecorpo-cli
@@ -120,6 +128,12 @@ procurement-logs:
 procurement-psql:
 	docker compose exec postgres psql -U fakecorpo -d db_procurement
 
+production-logs:
+	docker compose logs -f --tail=100 sim-production
+
+production-psql:
+	docker compose exec postgres psql -U fakecorpo -d db_production
+
 cli-status:
 	$(VENV_BIN)/fakecorpo clock status
 
@@ -134,7 +148,8 @@ cli-resume:
 test: $(VENV_PY)
 	$(VENV_PY) -m pytest -q \
 	    simulators/orchestrator-clock/tests \
-	    simulators/sim-procurement/tests
+	    simulators/sim-procurement/tests \
+	    simulators/sim-production/tests
 
 clean:
 	@echo "Removing build artifacts (keeping $(VENV) and docker volumes)"

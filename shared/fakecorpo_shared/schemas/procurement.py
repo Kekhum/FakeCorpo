@@ -55,6 +55,17 @@ ArrivalStatus = Literal["on_time", "delayed", "very_delayed", "lost"]
 QualityStatus = Literal["accepted", "partial", "rejected"]
 
 
+class PurchaseOrderArrivedLine(BaseModel):
+    """Per-variety breakdown of a settled PO. `quantity_accepted_kg` is the
+    line's `quantity_ordered_kg` scaled by the overall accepted fraction —
+    consumers (sim-production) use this to credit green-coffee inventory
+    by variety without having to query procurement's database."""
+
+    variety_code: str
+    quantity_ordered_kg: float = Field(ge=0)
+    quantity_accepted_kg: float = Field(ge=0)
+
+
 class PurchaseOrderArrived(BaseModel):
     """Event published to `procurement.po_arrived` once a shipment is
     settled (either physically received with quality outcome, or written
@@ -71,6 +82,7 @@ class PurchaseOrderArrived(BaseModel):
     quality_reason: str | None = None
     quantity_ordered_kg: float = Field(ge=0)
     quantity_accepted_kg: float = Field(ge=0)
+    lines: list[PurchaseOrderArrivedLine] = Field(default_factory=list)
 
     @field_validator("sim_expected_arrival", "sim_actual_arrival")
     @classmethod

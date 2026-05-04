@@ -31,7 +31,8 @@ This is **iteration 2** — a 100% local Docker learning environment. Implemente
 - Local infrastructure (Redis, Redpanda + console, MinIO, Postgres) via `docker compose`.
 - `orchestrator-clock` — global simulation clock; FastAPI control plane, ticker publishing `clock.tick` to Redpanda.
 - `sim-procurement` — first business-domain actor. Subscribes to `clock.tick`. Every simulated week the NL hub picks 1-3 suppliers and places purchase orders for green coffee; every simulated day the arrivals scanner settles in-transit POs (on-time / delayed / very-delayed / lost), runs QC (accepted / partial / rejected), and publishes `procurement.po_created` and `procurement.po_arrived` events. State persists in its own Postgres database `db_procurement`. Master data (10 international suppliers + 12 coffee varieties) seeded on first start.
-- **Dirty-data layer** (the meat of the DE/DS exercise): supplier names on invoices that drift from canonical master data (different casing, abbreviations, legal forms — the MDM problem); a chunk of invoices billed in EUR even though contracts are USD, with FX rates that jitter and occasionally go missing; arrivals that come late, very late, or never; QC rejections with realistic reasons. All probabilities are env-tunable (`PROC_P_*`).
+- `sim-production` — Rotterdam roastery. Subscribes to **two** topics: `clock.tick` and `procurement.po_arrived`. Arrivals credit the green-coffee inventory by variety (one row per variety_code in `green_inventory`, plus an audit log of every movement). Each simulated day the roastery decides 3-8 batches to start, picks SKUs (8 across 3 brands: Bean&Brew, NordRoast, Café Polonia), checks recipes against inventory, and starts batches that have stock. Each batch runs ~12 sim-minutes during which it streams a temperature curve to `production.roaster_telemetry`; on completion, the roastery applies a Gaussian weight loss (~17%) and a cupping score, marks the batch `completed` or `rejected`, and publishes `production.batch_completed`. State persists in `db_production`.
+- **Dirty-data layer** in procurement (the meat of the DE/DS exercise): supplier names on invoices that drift from canonical master data (different casing, abbreviations, legal forms — the MDM problem); a chunk of invoices billed in EUR even though contracts are USD, with FX rates that jitter and occasionally go missing; arrivals that come late, very late, or never; QC rejections with realistic reasons. All probabilities are env-tunable (`PROC_P_*`).
 - `fakecorpo-cli` admin tool — `fakecorpo clock {status,pause,resume,speed,seek}`.
 - Shared schemas (`fakecorpo_shared.schemas`) — `clock.ClockState`, `clock.ClockTick`, `procurement.PurchaseOrderCreated`.
 
@@ -68,17 +69,20 @@ docker compose restart orchestrator-clock
 make reset
 ```
 
-### Watch the procurement domain
+### Watch the supply chain come alive
 
-After `make up`, `sim-procurement` boots, creates `db_procurement`, seeds 10 suppliers and 12 coffee varieties, then waits for ticks. With the default speed (288), the first PO comes ~35 real minutes after start; bump it for impatient inspection:
+After `make up`, all simulators boot, create their databases, seed master data, and wait for clock ticks. With the default speed (288), things move slowly. Bump it for impatient inspection:
 
 ```bash
-fakecorpo clock speed 86400         # 1 sim-day per real second -> 1 sim-week per 7 sec
-make procurement-logs               # watch POs being placed
-make procurement-psql               # poke at suppliers / purchase_orders / po_lines
+fakecorpo clock speed 86400          # 1 sim-day per real second
+make procurement-logs                # watch POs being placed and arrivals settling
+make production-logs                 # watch batches start, telemetry stream, completions
+make procurement-psql                # poke at suppliers / purchase_orders / po_lines
+make production-psql                 # poke at green_inventory / roasting_batches / roasted_inventory
 ```
 
-In Redpanda Console (<http://localhost:8080>), the topic `procurement.po_created` carries one event per PO.
+In Redpanda Console (<http://localhost:8080>) you'll see five topics in flight:
+`clock.tick` · `procurement.po_created` · `procurement.po_arrived` · `production.batch_started` · `production.batch_completed` · `production.roaster_telemetry` (this last one is high-frequency time-series data).
 
 ### Hot-reload dev mode for the clock
 

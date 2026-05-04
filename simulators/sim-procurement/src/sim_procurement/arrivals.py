@@ -2,15 +2,18 @@ import logging
 import random
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fakecorpo_shared.schemas.procurement import PurchaseOrderArrived
+from fakecorpo_shared.schemas.procurement import (
+    PurchaseOrderArrived,
+    PurchaseOrderArrivedLine,
+)
 
 from .config import Settings
 from .dirty import decide_arrival, decide_quality
 from .events import EventPublisher
-from .models import PurchaseOrder, PurchaseOrderLine, Supplier
+from .models import CoffeeVariety, PurchaseOrder, PurchaseOrderLine, Supplier
 from .seed_data import QUALITY_PARTIAL_REASONS, QUALITY_REJECTED_REASONS
 
 log = logging.getLogger(__name__)
@@ -41,13 +44,16 @@ async def run_arrivals_scan(
     events: list[PurchaseOrderArrived] = []
 
     for po in due:
-        # Sum quantities ordered (cheap query — POs typically have 1-2 lines).
-        qty_ordered = (
-            await session.scalar(
-                select(func.coalesce(func.sum(PurchaseOrderLine.quantity_kg), 0.0))
+        # Per-line ordered quantities, joined with variety code so that
+        # the event downstream consumers receive is self-contained.
+        line_rows = (
+            await session.execute(
+                select(PurchaseOrderLine.quantity_kg, CoffeeVariety.code)
+                .join(CoffeeVariety, CoffeeVariety.id == PurchaseOrderLine.variety_id)
                 .where(PurchaseOrderLine.po_id == po.id)
             )
-        ) or 0.0
+        ).all()
+        qty_ordered = sum(qty for qty, _ in line_rows)
 
         arrival = decide_arrival(rng)
 
@@ -58,6 +64,15 @@ async def run_arrivals_scan(
             po.quality_reason = None
             po.quantity_accepted_kg = 0.0
             po.status = "lost"
+            accepted_fraction = 0.0
+            event_lines = [
+                PurchaseOrderArrivedLine(
+                    variety_code=code,
+                    quantity_ordered_kg=qty,
+                    quantity_accepted_kg=0.0,
+                )
+                for qty, code in line_rows
+            ]
             event = PurchaseOrderArrived(
                 po_id=po.id,
                 po_number=po.po_number,
@@ -70,13 +85,15 @@ async def run_arrivals_scan(
                 quality_reason=None,
                 quantity_ordered_kg=qty_ordered,
                 quantity_accepted_kg=0.0,
+                lines=event_lines,
             )
         else:
             actual = po.sim_expected_arrival + timedelta(days=arrival.delay_days)
             quality = decide_quality(
                 rng, QUALITY_PARTIAL_REASONS, QUALITY_REJECTED_REASONS
             )
-            accepted = round(qty_ordered * quality.accepted_fraction, 2)
+            accepted_fraction = quality.accepted_fraction
+            accepted = round(qty_ordered * accepted_fraction, 2)
 
             po.arrival_status = arrival.status
             po.sim_actual_arrival = actual
@@ -84,6 +101,14 @@ async def run_arrivals_scan(
             po.quality_reason = quality.reason
             po.quantity_accepted_kg = accepted
             po.status = "arrived"
+            event_lines = [
+                PurchaseOrderArrivedLine(
+                    variety_code=code,
+                    quantity_ordered_kg=qty,
+                    quantity_accepted_kg=round(qty * accepted_fraction, 2),
+                )
+                for qty, code in line_rows
+            ]
             event = PurchaseOrderArrived(
                 po_id=po.id,
                 po_number=po.po_number,
@@ -96,6 +121,7 @@ async def run_arrivals_scan(
                 quality_reason=quality.reason,
                 quantity_ordered_kg=qty_ordered,
                 quantity_accepted_kg=accepted,
+                lines=event_lines,
             )
         events.append(event)
 

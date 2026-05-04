@@ -89,6 +89,40 @@ services:
       retries: 5
 
   # ---------- Simulators ----------
+  sim-production:
+    build:
+      context: .
+      dockerfile: simulators/sim-production/Dockerfile
+    container_name: fakecorpo-sim-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      orchestrator-clock:
+        condition: service_healthy
+    environment:
+      PROD_DATABASE_URL: postgresql+asyncpg://fakecorpo:fakecorpo@postgres:5432/db_production
+      PROD_DATABASE_BOOTSTRAP_URL: postgresql+asyncpg://fakecorpo:fakecorpo@postgres:5432/postgres
+      PROD_DATABASE_NAME: db_production
+      PROD_KAFKA_BROKERS: redpanda:9092
+      PROD_KAFKA_TOPIC_TICK: clock.tick
+      PROD_KAFKA_TOPIC_PO_ARRIVED: procurement.po_arrived
+      PROD_KAFKA_TOPIC_BATCH_STARTED: production.batch_started
+      PROD_KAFKA_TOPIC_BATCH_COMPLETED: production.batch_completed
+      PROD_KAFKA_TOPIC_TELEMETRY: production.roaster_telemetry
+      PROD_KAFKA_CONSUMER_GROUP: sim-production
+      PROD_ROASTING_DECISION_INTERVAL_SIM_DAYS: "1"
+      PROD_MIN_BATCHES_PER_DAY: "3"
+      PROD_MAX_BATCHES_PER_DAY: "8"
+      PROD_BATCH_SIZE_MIN_KG: "50"
+      PROD_BATCH_SIZE_MAX_KG: "200"
+      PROD_ROAST_DURATION_SIM_SECONDS: "720"
+      PROD_TELEMETRY_SAMPLE_INTERVAL_SIM_SECONDS: "10"
+      PROD_RANDOM_SEED: "99"
+      PROD_LOG_LEVEL: INFO
+    restart: unless-stopped
+
   sim-procurement:
     build:
       context: .
