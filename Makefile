@@ -1,8 +1,9 @@
 .PHONY: help up down logs ps restart rebuild reset \
-        venv install install-shared install-clock install-procurement install-production install-cli \
+        venv install install-shared install-clock install-procurement install-production install-pos install-cli \
         clock-run clock-logs clock-reset \
         procurement-logs procurement-psql \
         production-logs production-psql \
+        pos-logs pos-psql \
         cli-status cli-pause cli-resume \
         test clean
 
@@ -48,6 +49,10 @@ help:
 	@echo "  make production-logs    - tail logs of sim-production"
 	@echo "  make production-psql    - psql shell into db_production (recipes, batches, ...)"
 	@echo ""
+	@echo "POS domain (15 cafés across 3 brands):"
+	@echo "  make pos-logs           - tail logs of sim-pos-cafes"
+	@echo "  make pos-psql           - psql shell into db_pos (cafes, transactions, weather, ...)"
+	@echo ""
 	@echo "CLI (talks to whichever clock is on :8000):"
 	@echo "  make cli-status   - show current sim clock state"
 	@echo "  make cli-pause    - pause the simulation"
@@ -91,7 +96,7 @@ venv: $(VENV_PY)
 
 # ---------- Python install ----------
 
-install: install-shared install-clock install-procurement install-production install-cli
+install: install-shared install-clock install-procurement install-production install-pos install-cli
 
 install-shared: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./shared
@@ -104,6 +109,9 @@ install-procurement: $(VENV_PY)
 
 install-production: $(VENV_PY)
 	$(VENV_PY) -m pip install -e "./simulators/sim-production[test]"
+
+install-pos: $(VENV_PY)
+	$(VENV_PY) -m pip install -e "./simulators/sim-pos-cafes[test]"
 
 install-cli: $(VENV_PY)
 	$(VENV_PY) -m pip install -e ./tools/fakecorpo-cli
@@ -134,6 +142,12 @@ production-logs:
 production-psql:
 	docker compose exec postgres psql -U fakecorpo -d db_production
 
+pos-logs:
+	docker compose logs -f --tail=100 sim-pos-cafes
+
+pos-psql:
+	docker compose exec postgres psql -U fakecorpo -d db_pos
+
 cli-status:
 	$(VENV_BIN)/fakecorpo clock status
 
@@ -149,7 +163,8 @@ test: $(VENV_PY)
 	$(VENV_PY) -m pytest -q \
 	    simulators/orchestrator-clock/tests \
 	    simulators/sim-procurement/tests \
-	    simulators/sim-production/tests
+	    simulators/sim-production/tests \
+	    simulators/sim-pos-cafes/tests
 
 clean:
 	@echo "Removing build artifacts (keeping $(VENV) and docker volumes)"

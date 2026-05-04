@@ -89,6 +89,32 @@ services:
       retries: 5
 
   # ---------- Simulators ----------
+  sim-pos-cafes:
+    build:
+      context: .
+      dockerfile: simulators/sim-pos-cafes/Dockerfile
+    container_name: fakecorpo-sim-pos-cafes
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      orchestrator-clock:
+        condition: service_healthy
+    environment:
+      POS_DATABASE_URL: postgresql+asyncpg://fakecorpo:fakecorpo@postgres:5432/db_pos
+      POS_DATABASE_BOOTSTRAP_URL: postgresql+asyncpg://fakecorpo:fakecorpo@postgres:5432/postgres
+      POS_DATABASE_NAME: db_pos
+      POS_KAFKA_BROKERS: redpanda:9092
+      POS_KAFKA_TOPIC_TICK: clock.tick
+      POS_KAFKA_TOPIC_TRANSACTION: pos.transaction_completed
+      POS_KAFKA_CONSUMER_GROUP: sim-pos-cafes
+      POS_MAX_HOURS_PER_TICK: "24"
+      POS_PAYMENT_CARD_SHARE: "0.70"
+      POS_RANDOM_SEED: "7"
+      POS_LOG_LEVEL: INFO
+    restart: unless-stopped
+
   sim-production:
     build:
       context: .
