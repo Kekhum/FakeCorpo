@@ -26,41 +26,56 @@ A globally-shared **orchestrator-clock** publishes simulated time to a Kafka top
 
 ## Status
 
-This is **iteration 1**. Implemented:
+This is **iteration 1** — a 100% local Docker learning environment. Implemented:
 
 - Local infrastructure (Redis, Redpanda + console, MinIO, Postgres) via `docker compose`
-- `orchestrator-clock` service — FastAPI app with HTTP control plane and a background ticker that advances simulated time and publishes `clock.tick` events to Redpanda
+- `orchestrator-clock` service — FastAPI app with HTTP control plane and a background ticker that advances simulated time and publishes `clock.tick` events to Redpanda. Runs as a compose service (default) or locally with hot reload (dev).
 - `fakecorpo-cli` admin tool — `fakecorpo clock {status,pause,resume,speed,seek}`
 - Shared schemas (`fakecorpo_shared.schemas.clock`) — `ClockState`, `ClockTick`
 
-Not yet here: any business-domain simulator (procurement, production, sales-pos, ...), seeders, Railway deployment configs.
+Not yet here: any business-domain simulator (procurement, production, sales-pos, ...), seeders, per-brand CRM databases.
 
-## Local quickstart
+## Local quickstart — "the company is alive on my laptop"
 
-Requirements: Python 3.12+, Docker.
+Requirements: Docker (with Compose v2). Python 3.12+ only needed if you want to use the CLI from host or do hot-reload dev on the clock.
 
 ```bash
-# 1) start infra
+# 1) bring up the whole simulated company (infra + simulators)
 make up
 
-# 2) install python packages (editable)
+# 2) watch ticks flow
+#    Redpanda Console:  http://localhost:8080  -> Topics -> clock.tick
+#    MinIO Console:     http://localhost:9001  (login minioadmin / minioadmin)
+
+# 3) talk to the clock from the CLI (one-time install of the venv-based CLI)
 make install
+.\.venv\Scripts\fakecorpo.exe clock status                # Windows
+./.venv/bin/fakecorpo clock status                        # Linux / macOS
 
-# 3) copy and edit env
-cp .env.example .env
-
-# 4) run the clock
-make clock-run
-
-# 5) in another terminal, talk to it
-make cli-status
-fakecorpo clock speed 60      # 1 real sec = 1 sim min (slow & easy to watch)
+# 4) try the controls
+fakecorpo clock speed 60                                  # 1 real sec = 1 sim min
 fakecorpo clock pause
 fakecorpo clock resume
-fakecorpo clock seek 2024-12-24T08:00:00+00:00
+fakecorpo clock seek 2024-12-24T08:00:00+00:00            # jump to a Christmas morning
+
+# 5) wipe the clock (start over from INITIAL_SIM_TIME) without nuking other data
+make clock-reset
+docker compose restart orchestrator-clock
+
+# 6) full reset of everything (drops volumes — Redis, Redpanda, MinIO, Postgres)
+make reset
 ```
 
-You'll see ticks flowing into Redpanda. Open the console at <http://localhost:8080> and watch the `clock.tick` topic.
+### Hot-reload dev mode for the clock
+
+When you're editing `simulators/orchestrator-clock/` and want instant feedback:
+
+```bash
+docker compose stop orchestrator-clock      # free port 8000 / Redis state
+make clock-run                              # uvicorn --reload from .venv
+```
+
+CLI still works against `http://localhost:8000`.
 
 ## Clock semantics
 
@@ -79,4 +94,4 @@ All env vars are documented in [.env.example](./.env.example). The `CLOCK_*` var
 3. `sim-pos-cafes` (3 marki, kawiarnie sprzedają wg sezonowości + pogody, POS events + nightly CSV)
 4. `sim-ecommerce`, `sim-b2b`, `sim-marketing`, `sim-finance`, `sim-hr`, `sim-support`
 5. Per-brand CRM databases with cross-brand duplicate-customer scenarios
-6. Railway deployment manifests (one project, one service per simulator + DBs)
+6. A "starter" notebook for DE/DS pointing at the source systems

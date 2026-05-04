@@ -1,6 +1,7 @@
-.PHONY: help up down logs ps restart \
+.PHONY: help up down logs ps restart rebuild reset \
         venv install install-shared install-clock install-cli \
-        clock-run cli-status cli-pause cli-resume \
+        clock-run clock-logs clock-reset \
+        cli-status cli-pause cli-resume \
         test clean
 
 # ---------- venv config ----------
@@ -21,20 +22,23 @@ PY ?= python
 help:
 	@echo "FakeCorpo - common dev commands"
 	@echo ""
-	@echo "Infrastructure (docker compose):"
-	@echo "  make up           - start redis, redpanda, minio, postgres"
+	@echo "Run the whole simulated company (default mode):"
+	@echo "  make up           - start everything (infra + simulators)"
 	@echo "  make down         - stop and remove containers"
-	@echo "  make logs         - tail container logs"
+	@echo "  make logs         - tail all container logs"
 	@echo "  make ps           - list running containers"
+	@echo "  make rebuild      - rebuild simulator images after code changes"
+	@echo "  make reset        - DROP all sim state (volumes + containers) and restart fresh"
 	@echo ""
-	@echo "Python install (always into ./$(VENV)):"
-	@echo "  make venv         - create the venv (auto-run by install*)"
-	@echo "  make install      - install shared + orchestrator-clock + cli (editable)"
+	@echo "Hot-reload dev for the clock (instead of running it in compose):"
+	@echo "  make install      - install shared + clock + cli into local .venv"
+	@echo "  make clock-run    - run orchestrator-clock locally with --reload on :8000"
+	@echo "                      (stop the compose 'orchestrator-clock' service first)"
+	@echo "  make clock-logs   - tail logs of the compose orchestrator-clock service"
+	@echo "  make clock-reset  - clear ONLY the clock state in Redis (sim restarts from"
+	@echo "                      INITIAL_SIM_TIME on next tick), without touching other data"
 	@echo ""
-	@echo "Run services:"
-	@echo "  make clock-run    - run orchestrator-clock locally on :8000"
-	@echo ""
-	@echo "Use the CLI:"
+	@echo "CLI (talks to whichever clock is on :8000):"
 	@echo "  make cli-status   - show current sim clock state"
 	@echo "  make cli-pause    - pause the simulation"
 	@echo "  make cli-resume   - resume the simulation"
@@ -57,6 +61,15 @@ ps:
 	docker compose ps
 
 restart: down up
+
+rebuild:
+	docker compose build orchestrator-clock
+	docker compose up -d orchestrator-clock
+
+reset:
+	@echo "Tearing down all containers AND volumes — this wipes Redis, Redpanda, MinIO, Postgres."
+	docker compose down -v
+	docker compose up -d --build
 
 # ---------- venv ----------
 # Create venv only if missing; idempotent
@@ -82,7 +95,16 @@ install-cli: $(VENV_PY)
 # ---------- Run ----------
 
 clock-run: $(VENV_PY)
-	$(VENV_PY) -m uvicorn orchestrator_clock.app:app --host 0.0.0.0 --port 8000 --reload
+	$(VENV_PY) -m uvicorn orchestrator_clock.app:app --host 0.0.0.0 --port 8000 --reload \
+	    --app-dir simulators/orchestrator-clock/src
+
+clock-logs:
+	docker compose logs -f --tail=100 orchestrator-clock
+
+clock-reset:
+	docker compose exec redis redis-cli DEL clock:state clock:tick_id
+	@echo "Clock state cleared. Restart the orchestrator-clock to seed from INITIAL_SIM_TIME:"
+	@echo "  docker compose restart orchestrator-clock"
 
 cli-status:
 	$(VENV_BIN)/fakecorpo clock status

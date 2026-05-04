@@ -23,7 +23,7 @@ services:
       - start
       - --overprovisioned
       - --smp=1
-      - --memory=512M
+      - --memory=1G
       - --reserve-memory=0M
       - --node-id=0
       - --check=false
@@ -87,6 +87,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # ---------- Simulators ----------
+  orchestrator-clock:
+    build:
+      context: .
+      dockerfile: simulators/orchestrator-clock/Dockerfile
+    container_name: fakecorpo-orchestrator-clock
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    environment:
+      CLOCK_REDIS_URL: redis://redis:6379/0
+      CLOCK_KAFKA_BROKERS: redpanda:9092
+      CLOCK_KAFKA_TOPIC_TICK: clock.tick
+      CLOCK_INITIAL_SIM_TIME: "2022-01-01T00:00:00+00:00"
+      CLOCK_INITIAL_SPEED_RATIO: "288"
+      CLOCK_TICK_INTERVAL_SECONDS: "1.0"
+      CLOCK_PORT: "8000"
+      CLOCK_LOG_LEVEL: "INFO"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:8000/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   redis-data:

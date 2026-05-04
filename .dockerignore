@@ -1,0 +1,30 @@
+# Keep the build context small and reproducible.
+# Without this, `make rebuild` ships the whole .venv (~hundreds of MB) to the
+# Docker daemon every time.
+
+.venv/
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+.env
+.env.local
+.env.*.local
+
+*.md
+!simulators/*/README.md
+!shared/README.md
+!tools/*/README.md
+
+skills-lock.json
